@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:get/get.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -12,8 +13,8 @@ class AudioController extends GetxController {
   var fileNameB = 'File B'.obs;
   var position = Duration.zero.obs;
   var duration = Duration.zero.obs;
-  var volumeA = 0.0.obs;
-  var volumeB = 0.0.obs;
+  var volumeA = 0.5.obs;
+  var volumeB = 0.5.obs;
   var masterVolume = 1.0.obs;
 
   Future<void> init() async {
@@ -90,7 +91,12 @@ class AudioController extends GetxController {
   }
 
   double _calculateVolumeGain(double volume) {
-    return (volume + 10) / 10;  // Centered at 0, adjusted by a step of 0.5
+    // Use a logarithmic scale for volume control
+    if (volume < 0) {
+      return pow(10, volume / 20).toDouble(); // Negative volumes get reduced logarithmically
+    } else {
+      return 1 + volume * 2; // Positive volumes get boosted
+    }
   }
 
   void setMasterVolume(double volume) {
@@ -119,6 +125,38 @@ class AudioController extends GetxController {
       await playerB.pause();
     }
     isPlayingA.value = !isPlayingA.value;
+  }
+
+  double calculateRMS(List<int> samples) {
+    double squares = samples.fold(0, (sum, sample) => sum + pow(sample / 32768, 2));
+    return sqrt(squares / samples.length);
+  }
+
+  Future<List<int>> _getAudioSamples(String filePath) async {
+    // You will need a method to decode the audio file and extract samples.
+    // This implementation assumes you have a way to do this.
+    // For example, you might use an audio decoding library.
+    return [];
+  }
+
+  Future<double> getRMS(String filePath) async {
+    List<int> samples = await _getAudioSamples(filePath);
+    return calculateRMS(samples);
+  }
+
+  Future<void> matchGain() async {
+    double rmsA = await getRMS(filePathA.value);
+    double rmsB = await getRMS(filePathB.value);
+    double targetRMS = (rmsA + rmsB) / 2;
+
+    double gainA = targetRMS / rmsA;
+    double gainB = targetRMS / rmsB;
+
+    playerA.setVolume(gainA);
+    playerB.setVolume(gainB);
+
+    volumeA.value = log(gainA) * 20; // Update UI volume to match gain
+    volumeB.value = log(gainB) * 20; // Update UI volume to match gain
   }
 
   @override
